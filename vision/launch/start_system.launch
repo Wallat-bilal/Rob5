@@ -1,0 +1,84 @@
+<launch>
+
+
+    <!-- set roscontroller -->
+
+    <!-- start Webots -->
+    <arg name="no_gui" default="false," doc="Start Webots with minimal GUI"/>
+    <include file="$(find new_controller)/launch/controller.launch">
+    <arg name="mode" value="realtime"/>
+    <arg name="no_gui" value="$(arg no_gui)"/>
+    <arg name="world" value="$(find new_controller)/worlds/Fivebar_2023version.wbt"/>
+    </include>
+
+    <arg name="auto_close" default="false" doc="Startup mode"/>
+    <node name="manipulator" pkg="new_controller" type="manipulator" output="screen" required="$(arg auto_close)" args="--wait-for-param /Image_path"/>
+    <node name="get_time_client" pkg="new_controller" type="time_client" output="screen" required="$(arg auto_close)"/>
+    <node name="webots_display" pkg="vision" type="display.py" output="screen" required="$(arg auto_close)" args="--wait-for-param /Image_path"/>
+    <!--node name="display_test" pkg="new_controller" type="display_test" required="$(arg auto_close)"/-->
+
+    <!-- static transforms-->
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_camera_transform" args=" 0.0584708 -0.478062 0 1.57079632679489661923 0 3.1415926536 base_link camera_frame" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="base_to_robot_transform"  args="-0.665 -0.088 0 1.57079632679489661923 0 0  base_link robot_frame" />
+   
+    <!-- EKF -->
+
+    <node pkg="robot_pose_ekf" type="robot_pose_ekf" name="robot_pose_ekf" >
+    <param name="output_frame" value="world_frame"/>
+    <param name="base_footprint_frame" value="base_link"/>
+    <param name="freq" value="100"/>
+    <param name="sensor_timeout" value="50.0"/>
+    <param name="odom_used" value="true"/>
+    <param name="imu_used" value="false"/>
+    <param name="vo_used" value="true"/>
+    <param name="gps_used" value="false"/>
+    <param name="debug" value="true"/>
+    <param name="self_diagnose" value="true"/>
+    
+    </node>
+    <!-- Remapping ekf to base_link as the estimated frame -->
+    <remap from="/odom_combined" to="/base_link"/>
+
+    <!-- arguments -->
+    <arg name="Image_path_arg" default="(find vision)" doc="absolute image path"/>
+    <arg name="Start_image_arg" default="1" doc="first image number in the image folder"/>
+    <arg name="End_image_arg" default="20" doc="Last image, max around 50"/> <!--Max 50-->
+    <!-- vision -->
+    
+    <node name="vision_node" pkg="vision" type="vision_loader_node.py" output="screen" args="--wait-for-param /Image_path"> 
+    <param name="Image_path" value="$(arg Image_path_arg)"/>
+    <param name="Start_image" value="$(arg Start_image_arg)"/>
+    <param name="End_image" value="$(arg End_image_arg)"/>
+    </node>
+
+    <node name="encoder_odometry" pkg="encoder_odometry" type="encoder_odom_node" output="screen" args="--wait-for-param /Image_path"> 
+    <param name="Image_path" value="$(arg Image_path_arg)" />
+    <param name="Start_image" value="$(arg Start_image_arg)"/>
+    <param name="End_image" value="$(arg End_image_arg)"/>
+    </node>
+
+    <node name="trajectory_generation" pkg="trajectory_generation" type="trajectory_generation_node" output="screen"/>
+
+
+    <!-- Working launch file, inorder to run. You have to be in:
+    /home/dadi/p5_ws/src/P5_asphalt_robot/encoder_odometry/src
+    and use the following command to allow access: sudo chmod +x encoder_odom_node.cpp
+    (might have to do the same for vision.py), and it should be able to launch. -->
+
+
+    <!-- Frame transformations are made with args="x y z yaw pitch roll frame_id child_frame"(just estimations now!)-->
+    <!--  <node pkg="tf2_ros" type="static_transform_publisher" name="odom2" args="0 0 0.3 0 0 0 odom base_link" />-->
+     <!-- Camera and vo frame placed to remove the outside edge. From the center of the axle to the back of the rear bar is 0.067m thick-->
+
+    <!-- Remapping to fit topics in the robot_pose_ekf package -->
+    <!--remap from="/odom" to="robot_pose_ekf/vo"/-->
+
+    <!-- Extended Kalman Filter, inorder to get the package you have to type the following command:
+    sudo apt-get install ros-noetic-robot-pose-ekf
+    The filter matches the relative world coordinates from the odom_frame and the camera_frame.
+    It returns a single estimated postion, based on the sensors' "error" covariances/-->
+
+    
+
+
+</launch>
